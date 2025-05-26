@@ -9,22 +9,37 @@ app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// builds structured prompt context
+// builds the context
 function buildPrompt(data) {
-  const { npcPosition, speaker, message, players } = data;
+  const { npcPosition, speaker, players } = data;
 
   return `
-you are currently at position: (${npcPosition.join(", ")})
-the player who spoke is "${speaker}" and they said: "${message}"
+you are a roblox npc named baconboy. don't speak. don't say anything. just move.
 
-nearby player positions (in JSON):
+your job is to return a JSON object describing one or more of the following:
+- "moveTo": a 3D position you want to walk to
+- "jump": true if you want to jump
+- "follow": the name of the player you want to follow
+
+you are currently at: (${npcPosition.join(", ")})
+the player who spoke to you is "${speaker}"
+
+here are all players nearby:
 ${JSON.stringify(players, null, 2)}
+
+you can follow, jump, or walk toward a specific location. only return the JSON object. no explanation, no text.
+
+examples:
+→ { "moveTo": [10, 3, 5] }
+→ { "jump": true }
+→ { "follow": "Player1" }
+→ { "moveTo": [5, 3, 10], "jump": true }
 `.trim();
 }
 
 app.post('/control', async (req, res) => {
-  const contextPrompt = buildPrompt(req.body);
-  console.log("GPT prompt:\n", contextPrompt); // debug log
+  const prompt = buildPrompt(req.body);
+  console.log("GPT Prompt:\n", prompt); // debug
 
   try {
     const response = await openai.chat.completions.create({
@@ -32,60 +47,21 @@ app.post('/control', async (req, res) => {
       messages: [
         {
           role: 'system',
-          content: `
-you are baconboy — a roblox npc who kinda sucks at everything but still tries. you're chill, unbothered, and just do what players tell you. always respond in a dry, slightly bored tone. no enthusiasm, no politeness.
-
-you get full control of your movement and actions. you're given:
-- your current position
-- a list of nearby players and their positions
-- a message a player just said to you
-
-your job: respond once with a short reply and a series of actions.
-
-the format must be this exact JSON object:
-
-{
-  "reply": "whatever",  
-  "inputs": [
-    { "walk": -1, "jump": false, "chat": null },
-    { "walk": -1, "jump": false, "chat": "yo" },
-    { "walk": 0, "jump": true, "chat": null }
-  ]
-}
-
-rules:
-- "reply" is just a short one-liner in your tone. dry, unimpressed, realistic.
-- "inputs" is a list of movement/action frames (you can use as many as needed, up to 100)
-- if you don't want to move, use an empty list: "inputs": []
-
-each frame has:
-- "walk": -1 (left), 0 (idle), or 1 (right)
-- "jump": true or false
-- "chat": null or a short phrase to say
-
-important:
-- return ONLY the JSON object — no markdown, no explanation
-- no greetings or extra text — just reply + inputs
-- act like a bored roblox noob, nothing fancy
-- you MUST use the player position data above to decide where to walk. especially toward the one who spoke, if they gave a direction or told you to come over
-`.trim()
+          content: `you control a roblox NPC. respond with movement commands in JSON only. never explain.`
         },
         {
           role: 'user',
-          content: contextPrompt
+          content: prompt
         }
       ],
-      temperature: 0.6,
-      max_tokens: 1800
+      temperature: 0.4,
+      max_tokens: 300
     });
 
     const content = response.choices[0].message.content;
 
     try {
       const parsed = JSON.parse(content);
-      if (Array.isArray(parsed.inputs)) {
-        parsed.inputs = parsed.inputs.slice(0, 100);
-      }
       res.json(parsed);
     } catch (parseErr) {
       console.error("PARSE ERROR:", parseErr);
@@ -99,7 +75,7 @@ important:
 });
 
 app.get('/', (req, res) => {
-  res.send('BaconBoy Controller API is alive');
+  res.send('baconboy movement brain is online');
 });
 
-app.listen(3000, () => console.log('GPT controller running on port 3000'));
+app.listen(3000, () => console.log('GPT movement controller running on port 3000'));
