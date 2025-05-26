@@ -63,14 +63,18 @@ app.post('/control', async (req, res) => {
       model: 'gpt-4o-mini',
       messages: [{ role: 'system', content: prompt }],
       temperature: 0.6,
-      max_tokens: 1800,
-      response_format: "json"
+      max_tokens: 1800
     });
 
-    const content = response.choices[0].message.content;
-    const parsed = JSON.parse(content);
-
-    res.json(parsed);
+    try {
+      const content = response.choices[0].message.content;
+      const parsed = JSON.parse(content);
+      res.json(parsed);
+    } catch (parseErr) {
+      console.error("PARSE ERROR:", parseErr);
+      console.log("RAW GPT OUTPUT:", response.choices[0].message.content);
+      res.status(500).json({ error: 'invalid GPT response' });
+    }
   } catch (err) {
     console.error("GPT ERROR:", err);
     res.status(500).json({ error: 'something went wrong' });
