@@ -78,7 +78,7 @@ app.post('/control', async (req, res) => {
     });
 
     const content = response.choices[0].message.content;
-    const split = content.split(/\r?\n\r?\n/); // split on empty line
+    const split = content.split(/\r?\n/, 2); // split on empty line
 
     if (split.length >= 2) {
       const reply = split[0].trim();
