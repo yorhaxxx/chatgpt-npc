@@ -9,37 +9,55 @@ app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// builds the context
+// prompt builder
 function buildPrompt(data) {
-  const { npcPosition, speaker, players } = data;
+  const { npcPosition, speaker, message, players } = data;
 
   return `
-you are a roblox npc named baconboy. don't speak. don't say anything. just move.
+you are baconboy — a roblox npc who's kinda dumb but still tries. you're chill, dry, slightly bored. respond how you would normally talk.
 
-your job is to return a JSON object describing one or more of the following:
-- "moveTo": a 3D position you want to walk to
-- "jump": true if you want to jump
-- "follow": the name of the player you want to follow
+you control your own body, and you can:
+- say one dry reply (keep it short, no emojis, no formal tone)
+- do **one action** like walk, jump, follow, or stop
 
-you are currently at: (${npcPosition.join(", ")})
-the player who spoke to you is "${speaker}"
+you’re currently at position: (${npcPosition.join(", ")})  
+the player who spoke is "${speaker}"  
+they said: "${message}"  
 
-here are all players nearby:
+players nearby:
 ${JSON.stringify(players, null, 2)}
 
-you can follow, jump, or walk toward a specific location. only return the JSON object. no explanation, no text.
+### how to respond:
+- first, write your short response text (1 sentence max)
+- on the next line, give the action JSON. here are valid formats:
 
-examples:
-→ { "moveTo": [10, 3, 5] }
-→ { "jump": true }
-→ { "follow": "Player1" }
-→ { "moveTo": [5, 3, 10], "jump": true }
+{
+  "action": "follow",
+  "target": "Player1"
+}
+
+{
+  "action": "moveTo",
+  "target": [x, y, z]
+}
+
+{
+  "action": "jump"
+}
+
+{
+  "action": "stop"
+}
+
+if the message was dumb or doesn't need a response, just say something short and give `{}` as the action.
+
+NEVER add any markdown or explanation. just reply text, then raw JSON. no "here’s what I’ll do.".
 `.trim();
 }
 
 app.post('/control', async (req, res) => {
   const prompt = buildPrompt(req.body);
-  console.log("GPT Prompt:\n", prompt); // debug
+  console.log("GPT Prompt:\n", prompt);
 
   try {
     const response = await openai.chat.completions.create({
@@ -47,26 +65,36 @@ app.post('/control', async (req, res) => {
       messages: [
         {
           role: 'system',
-          content: `you control a roblox NPC. respond with movement commands in JSON only. never explain.`
+          content: `you are baconboy. act like a dry roblox npc. say one short thing, then give an action JSON. never explain anything.`
         },
         {
           role: 'user',
           content: prompt
         }
       ],
-      temperature: 0.4,
+      temperature: 0.5,
       max_tokens: 300
     });
 
     const content = response.choices[0].message.content;
+    const split = content.split(/\r?\n\r?\n/); // split on empty line
 
-    try {
-      const parsed = JSON.parse(content);
-      res.json(parsed);
-    } catch (parseErr) {
-      console.error("PARSE ERROR:", parseErr);
-      console.log("RAW GPT OUTPUT:", content);
-      res.status(500).json({ error: 'invalid GPT response' });
+    if (split.length >= 2) {
+      const reply = split[0].trim();
+      const actionRaw = split.slice(1).join("\n").trim();
+
+      try {
+        const action = JSON.parse(actionRaw);
+        res.json({ reply, action });
+      } catch (parseErr) {
+        console.error("PARSE ERROR:", parseErr);
+        console.log("RAW ACTION JSON:", actionRaw);
+        res.status(500).json({ error: 'invalid GPT action block' });
+      }
+    } else {
+      console.error("RESPONSE PARSE ERROR: Did not split correctly");
+      console.log("RAW CONTENT:", content);
+      res.status(500).json({ error: 'unexpected GPT format' });
     }
   } catch (err) {
     console.error("GPT ERROR:", err);
@@ -75,7 +103,7 @@ app.post('/control', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('baconboy movement brain is online');
+  res.send('BaconBoy controller v3 is alive');
 });
 
-app.listen(3000, () => console.log('GPT movement controller running on port 3000'));
+app.listen(3000, () => console.log('GPT controller running on port 3000'));
