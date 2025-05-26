@@ -44,7 +44,7 @@ you always respond with:
   "action": "stop"
 }
 
-if the message is dumb or doesn't need a response, just say something short and return `{}`
+if the message is dumb or doesn't need a response, just say something short and return an empty {} as the action
 
 NO extra text. NO markdown. NO explanations. just reply text, then the JSON object.
 
