@@ -10,7 +10,7 @@ app.use(express.json());
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.post('/chat', async (req, res) => {
-  const { prompt } = req.body;
+  const { messages } = req.body; // ✅ fix: actually extract messages
 
   try {
     const response = await openai.chat.completions.create({
@@ -22,10 +22,11 @@ app.post('/chat', async (req, res) => {
 
     res.json({ reply: response.choices[0].message.content });
   } catch (err) {
-    console.error(err);
+    console.error("GPT ERROR:", err);
     res.status(500).json({ error: 'something went wrong' });
   }
 });
+
 
 app.get('/', (req, res) => {
   res.send('GPT Proxy is alive');
