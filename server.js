@@ -1,61 +1,52 @@
-import express from "express"
-import cors from "cors"
-import { OpenAI } from "openai"
-import axios from "axios"
-import fs from "fs"
-import path from "path"
+// server.js
+const express = require('express');
+const cors = require('cors');
+const axios = require('axios');
+const { Configuration, OpenAIApi } = require('openai');
 
-const app = express()
-app.use(cors())
-app.use(express.json())
-app.use("/temp", express.static("temp"))
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const configuration = new Configuration({
+  apiKey: process.env.OPENAI_API_KEY, // Ensure this environment variable is set
+});
+const openai = new OpenAIApi(configuration);
 
-app.post("/planet", async (req, res) => {
-	try {
-		const userMsg = req.body.user_message?.slice(0, 200) || "make me a planet"
+app.post('/generate-planet', async (req, res) => {
+  try {
+    const { prompt } = req.body;
 
-		const chat = await openai.chat.completions.create({
-			model: "gpt-4o",
-			messages: [
-				{
-					role: "system",
-					content: "You're a planet designer. Describe how a planet should look in one visual sentence. Example: 'a cracked lava planet with glowing molten fissures'."
-				},
-				{ role: "user", content: userMsg }
-			],
-			temperature: 0.7
-		})
+    // Generate a description for the planet
+    const completion = await openai.createCompletion({
+      model: 'text-davinci-003',
+      prompt: `Describe a unique planet: ${prompt}`,
+      max_tokens: 100,
+    });
 
-		const prompt = chat.choices[0].message.content.trim()
+    const description = completion.data.choices[0].text.trim();
 
-		const img = await openai.images.generate({
-			model: "dall-e-3",
-			prompt,
-			n: 1,
-			size: "1024x1024",
-			response_format: "url"
-		})
+    // Generate an image for the planet
+    const imageResponse = await openai.createImage({
+      prompt: description,
+      n: 1,
+      size: '512x512',
+    });
 
-		const imageUrl = img.data[0].url
-		const response = await axios.get(imageUrl, { responseType: "arraybuffer" })
-		const id = Date.now()
-		const filename = `planet_${id}.png`
-		const filepath = path.join("temp", filename)
-		fs.writeFileSync(filepath, response.data)
+    const imageUrl = imageResponse.data.data[0].url;
 
-		const hostedUrl = `${req.protocol}://${req.get("host")}/temp/${filename}`
+    res.json({
+      name: prompt,
+      description,
+      imageUrl,
+    });
+  } catch (error) {
+    console.error('Error generating planet:', error);
+    res.status(500).json({ error: 'Failed to generate planet.' });
+  }
+});
 
-		res.json({
-			prompt,
-			image_url: hostedUrl
-		})
-	} catch (err) {
-		console.error("[/planet] Error:", err)
-		res.status(500).json({ error: "Something went wrong." })
-	}
-})
-
-const PORT = process.env.PORT || 3000
-app.listen(PORT, () => console.log("🪐 Server running on port", PORT))
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
