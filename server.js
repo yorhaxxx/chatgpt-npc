@@ -11,52 +11,65 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 })
 
-app.post("/generate-planet", async (req, res) => {
-  try {
-    const { prompt } = req.body
-    console.log("[PlanetGen] Prompt received:", prompt)
+app.post("/planet", async (req, res) => {
+	try {
+		const userPrompt = req.body.user_message?.slice(0, 200) || "make me a planet"
+		console.log("[PlanetGen] Prompt received:", userPrompt)
 
-    // Step 1: generate a planet description from GPT
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        {
-          role: "system",
-          content: "Describe a beautiful and imaginative planet. Your answer will be used to generate an image."
-        },
-        {
-          role: "user",
-          content: prompt || "make me a planet"
-        }
-      ],
-      temperature: 0.8
-    })
+		// 🔹 STEP 1: GPT creates name + visual description
+		const gpt = await openai.chat.completions.create({
+			model: "gpt-4o",
+			messages: [
+				{
+					role: "system",
+					content: `You are a planet generator. Respond ONLY with a JSON object like:
+{
+  "name": "Luminara",
+  "description": "A glowing planet covered in crystal spires and bioluminescent forests."
+}`
+				},
+				{ role: "user", content: userPrompt }
+			],
+			temperature: 0.8
+		})
 
-    const description = completion.choices[0].message.content.trim()
-    console.log("[PlanetGen] GPT description:", description)
+		const raw = gpt.choices[0].message.content.trim()
+		let parsed = {}
 
-    // Step 2: generate an image using that description
-    const image = await openai.images.generate({
-      model: "dall-e-3",
-      prompt: description,
-      n: 1,
-      size: "1024x1024",
-      response_format: "url"
-    })
+		try {
+			parsed = JSON.parse(raw)
+		} catch (e) {
+			console.warn("[PlanetGen] Failed to parse GPT response:", raw)
+			return res.status(500).json({ error: "GPT failed to respond with JSON." })
+		}
 
-    const imageUrl = image.data[0].url
-    res.json({
-      name: prompt,
-      description,
-      imageUrl
-    })
-  } catch (err) {
-    console.error("[PlanetGen] Failed:", err.message || err)
-    res.status(500).json({ error: "Planet generation failed." })
-  }
+		if (!parsed.name || !parsed.description) {
+			return res.status(500).json({ error: "Incomplete planet data from GPT." })
+		}
+
+		// 🔹 STEP 2: DALL·E creates image from description
+		const image = await openai.images.generate({
+			model: "dall-e-3",
+			prompt: parsed.description,
+			n: 1,
+			size: "1024x1024",
+			response_format: "url"
+		})
+
+		const imageUrl = image.data[0].url
+
+		res.json({
+			name: parsed.name,
+			description: parsed.description,
+			image_url: imageUrl
+		})
+	} catch (err) {
+		console.error("[/planet] Error:", err.message || err)
+		res.status(500).json({ error: "Planet generation failed." })
+	}
 })
 
 const PORT = process.env.PORT || 3000
 app.listen(PORT, () => {
-  console.log(`🪐 PlanetGen server running on port ${PORT}`)
+	console.log("🪐 PlanetGen server running on port", PORT)
 })
