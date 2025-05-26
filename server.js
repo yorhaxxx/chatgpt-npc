@@ -1,22 +1,9 @@
-import express from "express"
-import cors from "cors"
-import { OpenAI } from "openai"
-import axios from "axios"
-
-const app = express()
-app.use(cors())
-app.use(express.json())
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-})
-
 app.post("/planet", async (req, res) => {
 	try {
 		const userPrompt = req.body.user_message?.slice(0, 200) || "make me a planet"
 		console.log("[PlanetGen] Prompt received:", userPrompt)
 
-		// 🔹 STEP 1: GPT creates name + visual description
+		// step 1: ask gpt for name + description
 		const gpt = await openai.chat.completions.create({
 			model: "gpt-4o",
 			messages: [
@@ -34,20 +21,24 @@ app.post("/planet", async (req, res) => {
 		})
 
 		const raw = gpt.choices[0].message.content.trim()
-		let parsed = {}
+		console.log("[PlanetGen] GPT raw:", raw)
 
+		let parsed = {}
 		try {
 			parsed = JSON.parse(raw)
 		} catch (e) {
 			console.warn("[PlanetGen] Failed to parse GPT response:", raw)
-			return res.status(500).json({ error: "GPT failed to respond with JSON." })
+			return res.status(500).json({ error: "GPT failed to return valid JSON." })
 		}
 
 		if (!parsed.name || !parsed.description) {
-			return res.status(500).json({ error: "Incomplete planet data from GPT." })
+			console.warn("[PlanetGen] Missing fields:", parsed)
+			return res.status(500).json({ error: "Incomplete planet data." })
 		}
 
-		// 🔹 STEP 2: DALL·E creates image from description
+		console.log("[PlanetGen] Description:", parsed.description)
+
+		// step 2: generate DALL·E image
 		const image = await openai.images.generate({
 			model: "dall-e-3",
 			prompt: parsed.description,
@@ -57,6 +48,7 @@ app.post("/planet", async (req, res) => {
 		})
 
 		const imageUrl = image.data[0].url
+		console.log("[PlanetGen] DALL·E URL:", imageUrl)
 
 		res.json({
 			name: parsed.name,
@@ -64,12 +56,7 @@ app.post("/planet", async (req, res) => {
 			image_url: imageUrl
 		})
 	} catch (err) {
-		console.error("[/planet] Error:", err.message || err)
+		console.error("[PlanetGen] SERVER ERROR:", err)
 		res.status(500).json({ error: "Planet generation failed." })
 	}
-})
-
-const PORT = process.env.PORT || 3000
-app.listen(PORT, () => {
-	console.log("🪐 PlanetGen server running on port", PORT)
 })
