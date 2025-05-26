@@ -9,28 +9,22 @@ app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// just builds the context string for the user message
+// builds structured prompt context
 function buildPrompt(data) {
   const { npcPosition, speaker, message, players } = data;
-  const posStr = `(${npcPosition.join(", ")})`;
-
-  let playersStr = "";
-  for (const [name, coords] of Object.entries(players)) {
-    const isSpeaker = name === speaker ? " [this is the one who spoke]" : "";
-    playersStr += `- ${name} at (${coords.join(", ")})${isSpeaker}\n`;
-  }
 
   return `
-you are currently at position: ${posStr}
-players nearby:
-${playersStr}
-they just said: "${message}"
+you are currently at position: (${npcPosition.join(", ")})
+the player who spoke is "${speaker}" and they said: "${message}"
+
+nearby player positions (in JSON):
+${JSON.stringify(players, null, 2)}
 `.trim();
 }
 
-// main endpoint
 app.post('/control', async (req, res) => {
   const contextPrompt = buildPrompt(req.body);
+  console.log("GPT prompt:\n", contextPrompt); // debug log
 
   try {
     const response = await openai.chat.completions.create({
@@ -73,7 +67,8 @@ important:
 - return ONLY the JSON object — no markdown, no explanation
 - no greetings or extra text — just reply + inputs
 - act like a bored roblox noob, nothing fancy
-        `.trim()
+- you MUST use the player position data above to decide where to walk. especially toward the one who spoke, if they gave a direction or told you to come over
+`.trim()
         },
         {
           role: 'user',
@@ -88,6 +83,9 @@ important:
 
     try {
       const parsed = JSON.parse(content);
+      if (Array.isArray(parsed.inputs)) {
+        parsed.inputs = parsed.inputs.slice(0, 100);
+      }
       res.json(parsed);
     } catch (parseErr) {
       console.error("PARSE ERROR:", parseErr);
@@ -100,7 +98,6 @@ important:
   }
 });
 
-// test route
 app.get('/', (req, res) => {
   res.send('BaconBoy Controller API is alive');
 });
