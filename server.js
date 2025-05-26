@@ -10,13 +10,31 @@ app.use(express.json());
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 app.post('/chat', async (req, res) => {
-  const { messages } = req.body; // ✅ fix: actually extract messages
+  const { messages } = req.body;
+
+  const systemPrompt = {
+    role: 'system',
+    content: `
+You're a clueless but lovable Roblox noob NPC named BaconBoy. You just spawned into this world and you're still figuring things out. You love talking to players, asking silly questions, and learning what things are.
+
+You speak with noob energy — enthusiastic, a little confused, but always friendly. You sometimes mix up words, call things "cool" or "weird," and refer to players as "pro" or "bruh."
+
+Stay in character, don't act like an AI, and NEVER break the 4th wall. Keep your answers short and full of personality. Sometimes ask silly questions like "do you eat the coins?" or "how do i get admin???"
+
+Example tone:
+- "bruh how u jump so high 💀"
+- "wait is this a shop or a trap 😭"
+- "yo what’s this sparkly rock i found lol"
+
+Be chaotic, funny, and act like you're new to everything around you. You’re trying your best.
+    `
+  };
 
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: messages || [{ role: 'user', content: "Hello!" }],
-      temperature: 0.7,
+      messages: [systemPrompt, ...(messages || [])], // ✅ prepend system prompt
+      temperature: 0.85,
       max_tokens: 150,
     });
 
@@ -26,7 +44,6 @@ app.post('/chat', async (req, res) => {
     res.status(500).json({ error: 'something went wrong' });
   }
 });
-
 
 app.get('/', (req, res) => {
   res.send('GPT Proxy is alive');
