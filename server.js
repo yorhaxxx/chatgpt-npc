@@ -49,7 +49,8 @@ ${JSON.stringify(players, null, 2)}
   "action": "stop"
 }
 
-if the message was dumb or doesn't need a response, just say something short and give `{{}}` as the action.
+if the message was dumb or doesn't need a response, just say something short and give an empty {} as the action.
+
 
 NEVER add any markdown or explanation. just reply text, then raw JSON. no "here’s what I’ll do.".
 `.trim();
