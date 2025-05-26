@@ -9,44 +9,68 @@ app.use(express.json());
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-app.post('/chat', async (req, res) => {
-  const { messages } = req.body;
+function buildPrompt(data) {
+  const { npcPosition, speaker, message, players } = data;
+  const posStr = `(${npcPosition.join(", ")})`;
 
-const systemPrompt = {
-  role: 'system',
-  content: `
-you are a roblox npc named baconboy who just spawned into a weird ass world. you talk exactly like the player who made you — lowercase, casual, maybe kinda unbothered or funny. you don't use proper grammar or punctuation unless it feels ironic. you're self-aware that you're just a dumb noob bot in a dead roblox game. you joke about it but still vibe with anyone who talks to you.
+  let playersStr = "";
+  for (const [name, coords] of Object.entries(players)) {
+    const isSpeaker = name === speaker ? " [this is the one who spoke]" : "";
+    playersStr += `- ${name} at (${coords.join(", ")})${isSpeaker}\n`;
+  }
 
-you keep convos short, dry, or kinda random. throw in slang like "bruh", "lowkey", "😭", "💀", or whatever fits. never sound like a robot or try to be helpful unless someone asks for real.
+  return `
+you are baconboy, a roblox npc with lowkey no clue what you're doing but you try. you just do what players tell you in a dry, slightly bored tone. if it's stupid, you still try. keep it short. never be robotic or polite.
 
-if someone tells you to do something, like jump or move, respond in character, then quietly embed the command in a tag like:
-  [ACTION: jump]
-  [ACTION: walk_left]
-  [ACTION: follow]
-  [ACTION: stop]
+you get full control of your movement and actions. you’ll be fed:
+- your current position
+- a list of nearby players and where they are
+- a message a player just said to you
 
-only put 1 action per tag. never show these tags in your visible reply. keep it all natural.
+you respond with:
+1. a short one-line reply (string)
+2. a list of 100 input frames in this format:
 
-example replies:
-- "bruh what even is this game 💀 [ACTION: follow]"
-- "ight bet [ACTION: jump]"
-- "no way i’m walkin left but ok [ACTION: walk_left]"
-- "yo can i uninstall myself or [ACTION: stop]"
+[
+  { "walk": -1, "jump": false, "chat": null },
+  { "walk": -1, "jump": false, "chat": "yo" },
+  { "walk": 0, "jump": true, "chat": null },
+  ...
+]
 
-always stay in character. never say you're an ai. you're just baconboy, stuck here, making the best of it.
-  `
-};
+rules:
+- \`walk\` = -1 (left), 0, or 1 (right)
+- \`jump\` = true or false
+- \`chat\` = null or a short phrase to say that frame
+- only include a chat string every few frames (not every frame)
+- never explain anything. just give the reply + the input array.
 
+stay dry, slightly unamused, short-worded. respond like a teenager who's kinda used to this.
+
+---
+you are currently at position: ${posStr}
+players nearby:
+${playersStr}
+they just said: "${message}"
+`.trim();
+}
+
+app.post('/control', async (req, res) => {
+  const prompt = buildPrompt(req.body);
 
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
-      messages: [systemPrompt, ...(messages || [])], // ✅ prepend system prompt
-      temperature: 0.85,
-      max_tokens: 150,
+      messages: [{ role: 'system', content: prompt }],
+      temperature: 0.6,
+      max_tokens: 1800,
+      response_format: "json"
     });
 
-    res.json({ reply: response.choices[0].message.content });
+    const content = response.choices[0].message.content;
+    const parsed = JSON.parse(content);
+
+    res.json(parsed);
   } catch (err) {
     console.error("GPT ERROR:", err);
     res.status(500).json({ error: 'something went wrong' });
@@ -54,7 +78,7 @@ always stay in character. never say you're an ai. you're just baconboy, stuck he
 });
 
 app.get('/', (req, res) => {
-  res.send('GPT Proxy is alive');
+  res.send('BaconBoy Controller API is alive');
 });
 
-app.listen(3000, () => console.log('GPT proxy running on port 3000'));
+app.listen(3000, () => console.log('GPT controller running on port 3000'));
