@@ -1,9 +1,21 @@
+import express from "express"
+import cors from "cors"
+import { OpenAI } from "openai"
+
+const app = express()
+app.use(cors())
+app.use(express.json())
+
+const openai = new OpenAI({
+	apiKey: process.env.OPENAI_API_KEY
+})
+
 app.post("/planet", async (req, res) => {
 	try {
 		const userPrompt = req.body.user_message?.slice(0, 200) || "make me a planet"
 		console.log("[PlanetGen] Prompt received:", userPrompt)
 
-		// step 1: ask gpt for name + description
+		// ask GPT for planet data
 		const gpt = await openai.chat.completions.create({
 			model: "gpt-4o",
 			messages: [
@@ -38,7 +50,7 @@ app.post("/planet", async (req, res) => {
 
 		console.log("[PlanetGen] Description:", parsed.description)
 
-		// step 2: generate DALL·E image
+		// call DALL·E for image generation
 		const image = await openai.images.generate({
 			model: "dall-e-3",
 			prompt: parsed.description,
@@ -59,4 +71,9 @@ app.post("/planet", async (req, res) => {
 		console.error("[PlanetGen] SERVER ERROR:", err)
 		res.status(500).json({ error: "Planet generation failed." })
 	}
+})
+
+const PORT = process.env.PORT || 3000
+app.listen(PORT, () => {
+	console.log(`🪐 PlanetGen server running on port ${PORT}`)
 })
